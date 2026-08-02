@@ -1,0 +1,16 @@
+{
+  "name": "stable-diffusion.cpp",
+  "repository": "https://github.com/leejet/stable-diffusion.cpp",
+  "commit": "e31a86ce9110b11a98bd5990c329093244c2d1e3",
+  "license": "MIT",
+  "ggmlCommit": "eced84c86f8b012c752c016f7fe789adea168e1e",
+  "androidAbi": "arm64-v8a",
+  "androidApi": 28,
+  "backend": "Vulkan",
+  "localPatch": "saient-progress.patch",
+  "artifact": {
+    "path": "../arm64-v8a/libquartz-wan.so",
+    "bytes": 82749824,
+    "sha256": "d06ab10ffcb6a85ab0453b4888618188a0776790a77f47b823f6fb0ef4971086"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "expo": {
+    "name": "Saient",
+    "slug": "saient-mobile",
+    "version": "0.1.2",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "saient",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0d0d0f",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "co.uk.staticplay.app",
+      "infoPlist": {
+      }
+    },
+    "android": {
+      "package": "co.uk.staticplay.app",
+      "versionCode": 9,
+      "edgeToEdgeEnabled": true,
+      "allowBackup": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#0d0d0f",
+        "foregroundImage": "./assets/images/icon.png"
+      }
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/icon.png"
+    },
+    "updates": {
+      "enabled": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0d0d0f"
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Saient uses your contacts so it can text or call the people you ask it to."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Saient uses the camera to capture image-to-video source photos.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Saient uses the photo you select as the starting frame for image-to-video generation.",
+          "microphonePermission": "Saient records audio only while you hold the talk button."
+        }
+      ],
+      "./plugins/quartz/withQuartzEngine",
+      "./plugins/withReleaseSigning",
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

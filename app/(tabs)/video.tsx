@@ -1,0 +1,360 @@
+import { Ionicons } from "@expo/vector-icons";
+import { VideoView, useVideoPlayer } from "expo-video";
+import * as WebBrowser from "expo-web-browser";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { C } from "@/lib/theme";
+import {
+  addDiffusionDownloadProgressListener,
+  addVideoProgressListener,
+  cancelDiffusionModelDownload,
+  cancelLocalVideo,
+  diffusionAvailable,
+  downloadVideoModel,
+  generateLocalVideo,
+  getVideoStatus,
+  removeVideoModel,
+  setVideoModelActive,
+  type DiffusionDownloadProgress,
+  type DiffusionStatus,
+  type VideoGenerationResult,
+  type VideoProgress,
+} from "@/modules/saient-diffusion";
+
+const STEP_PRESETS = [
+  { value: 1, label: "Smoke" },
+  { value: 4, label: "Draft" },
+  { value: 8, label: "Quality" },
+];
+
+const FRAME_PRESETS = [
+  { value: 5, label: "5 frames" },
+  { value: 17, label: "2 sec" },
+  { value: 41, label: "5 sec" },
+];
+
+function fmtBytes(bytes: number) {
+  return bytes >= 1_000_000_000
+    ? `${(bytes / 1_000_000_000).toFixed(2)} GB`
+    : `${Math.round(bytes / 1_000_000)} MB`;
+}
+
+function GeneratedVideo({ result }: { result: VideoGenerationResult }) {
+  const player = useVideoPlayer(result.uri, (instance) => {
+    instance.loop = true;
+    instance.play();
+  });
+  return (
+    <View style={styles.resultCard}>
+      <VideoView
+        player={player}
+        style={styles.video}
+        nativeControls
+        contentFit="contain"
+        fullscreenOptions={{ enable: true }}
+      />
+      <View style={styles.resultBottom}>
+        <Ionicons name="checkmark-circle" size={17} color={C.green} />
+        <Text style={styles.resultMeta}>
+          {result.frames} frames · {result.steps} steps · {result.elapsedSeconds.toFixed(1)}s
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+export default function VideoScreen() {
+  const insets = useSafeAreaInsets();
+  const [status, setStatus] = useState<DiffusionStatus | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+  const [cancellingDownload, setCancellingDownload] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [steps, setSteps] = useState(1);
+  const [frames, setFrames] = useState(5);
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 2_147_483_647));
+  const [progress, setProgress] = useState<VideoProgress | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DiffusionDownloadProgress | null>(null);
+  const [result, setResult] = useState<VideoGenerationResult | null>(null);
+
+  const refresh = useCallback(async () => {
+    setChecking(true);
+    try {
+      setStatus(await getVideoStatus());
+    } catch (error) {
+      setStatus({ available: false, installed: false, valid: false, active: false, modelBytes: 0, message: String(error) });
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
+
+  useEffect(() => {
+    if (!diffusionAvailable()) return;
+    const progressSubscription = addVideoProgressListener(setProgress);
+    const downloadSubscription = addDiffusionDownloadProgressListener((event) => {
+      if (event.model === "video") setDownloadProgress(event);
+    });
+    return () => {
+      progressSubscription.remove();
+      downloadSubscription.remove();
+    };
+  }, []);
+
+  const download = useCallback(async () => {
+    setDownloading(true);
+    setDownloadProgress(null);
+    try {
+      setStatus(await downloadVideoModel());
+      Alert.alert("Wan ready", "Saient verified and installed the Wan2.1 mobile pack.");
+    } catch (error) {
+      if (!String(error).toLocaleLowerCase().includes("cancel")) {
+        Alert.alert("Could not download Wan", String(error));
+      }
+      await refresh();
+    } finally {
+      setDownloading(false);
+      setCancellingDownload(false);
+    }
+  }, [refresh]);
+
+  const generate = useCallback(async () => {
+    if (!status?.valid || !status.active) {
+      Alert.alert("Wan model needed", status?.valid ? "Activate the Wan model first." : "Download the Wan2.1 model pack first.");
+      return;
+    }
+    if (!prompt.trim()) {
+      Alert.alert("Prompt needed", "Describe the motion you want Wan to create.");
+      return;
+    }
+    setGenerating(true);
+    setProgress(null);
+    setResult(null);
+    try {
+      setResult(await generateLocalVideo({
+        prompt: prompt.trim(),
+        negativePrompt: negativePrompt.trim(),
+        steps,
+        guidance: 6,
+        seed,
+        frames,
+      }));
+    } catch (error) {
+      if (!String(error).toLocaleLowerCase().includes("cancel")) {
+        Alert.alert("Video generation failed", String(error));
+      }
+    } finally {
+      setGenerating(false);
+      setCancelling(false);
+    }
+  }, [frames, negativePrompt, prompt, seed, status?.active, status?.valid, steps]);
+
+  const downloadFraction = downloadProgress && downloadProgress.totalBytes > 0
+    ? downloadProgress.completedBytes / downloadProgress.totalBytes
+    : 0;
+  const generationFraction = progress && progress.total > 0 ? progress.completed / progress.total : 0;
+  const busy = downloading || generating;
+
+  return (
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8, paddingBottom: 40 }}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.h1}>Video</Text>
+          <Text style={styles.sub}>Wan2.1 T2V 1.3B · local Vulkan experiment</Text>
+        </View>
+        <View style={[styles.state, status?.active ? styles.stateReady : styles.stateWaiting]}>
+          <Ionicons name={status?.active ? "checkmark-circle" : "flask-outline"} size={15} color={status?.active ? C.green : C.amber} />
+          <Text style={{ color: status?.active ? C.green : C.amber, fontSize: 11, fontWeight: "700" }}>
+            {checking ? "Checking" : status?.active ? "Ready" : status?.valid ? "Inactive" : "Model needed"}
+          </Text>
+        </View>
+      </View>
+
+      {!status?.valid ? (
+        <View style={styles.setupCard}>
+          <View style={styles.setupIcon}><Ionicons name="videocam-outline" size={34} color={C.accent} /></View>
+          <Text style={styles.setupTitle}>Add the Wan video pack</Text>
+          <Text style={styles.setupText}>
+            Download the quantized Wan2.1 1.3B transformer, UMT5 encoder and VAE from the Saient Pi. Every file is SHA-256 checked before installation.
+          </Text>
+          <Text style={styles.setupMeta}>2.93 GB · 416×240 test profile · offline after setup</Text>
+          <Pressable style={[styles.primary, busy && styles.disabled]} onPress={() => { void download(); }} disabled={busy || !status?.available}>
+            <Ionicons name="download-outline" size={18} color={C.bg} />
+            <Text style={styles.primaryText}>{downloading ? `Downloading ${Math.floor(downloadFraction * 100)}%` : "Download Wan pack"}</Text>
+          </Pressable>
+          {downloading && (
+            <View style={styles.downloadProgress}>
+              <View style={styles.track}><View style={[styles.fill, { width: `${Math.floor(downloadFraction * 100)}%` }]} /></View>
+              <Text style={styles.progressHint} numberOfLines={1}>{downloadProgress?.currentFile ?? "Connecting to Saient Pi"}</Text>
+              <Pressable
+                style={[styles.textButton, cancellingDownload && styles.disabled]}
+                disabled={cancellingDownload}
+                onPress={() => {
+                  setCancellingDownload(true);
+                  void cancelDiffusionModelDownload().finally(() => setCancellingDownload(false));
+                }}
+              >
+                <Text style={styles.dangerText}>{cancellingDownload ? "Stopping…" : "Cancel download"}</Text>
+              </Pressable>
+            </View>
+          )}
+          <Pressable style={styles.licenseButton} onPress={() => { void WebBrowser.openBrowserAsync("https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B"); }}>
+            <Text style={styles.licenseText}>Wan2.1 T2V 1.3B model details</Text>
+          </Pressable>
+          {!!status?.message && <Text style={styles.statusMessage}>{status.message}</Text>}
+        </View>
+      ) : (
+        <>
+          <View style={[styles.modelCard, !status.active && { borderColor: C.amber }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modelName}>Wan2.1 T2V 1.3B mobile pack</Text>
+              <Text style={styles.modelMeta}>{fmtBytes(status.modelBytes)} · {status.active ? "Active" : "Inactive"} · Vulkan</Text>
+            </View>
+            {!status.active && (
+              <Pressable onPress={() => { void setVideoModelActive(true).then(setStatus); }} disabled={busy}>
+                <Text style={styles.actionText}>Activate</Text>
+              </Pressable>
+            )}
+            <Pressable
+              hitSlop={10}
+              disabled={busy}
+              onPress={() => Alert.alert("Remove Wan model?", "Generated videos stay on the phone.", [
+                { text: "Keep", style: "cancel" },
+                { text: "Remove", style: "destructive", onPress: () => { void removeVideoModel().then(setStatus); } },
+              ])}
+            >
+              <Ionicons name="trash-outline" size={18} color={C.text3} />
+            </Pressable>
+          </View>
+
+          <Text style={styles.label}>Motion prompt</Text>
+          <TextInput style={styles.prompt} value={prompt} onChangeText={setPrompt} editable={!busy} multiline maxLength={1000} placeholder="A red fox turns toward the camera as snow falls…" placeholderTextColor={C.text3} />
+          <Text style={styles.label}>Avoid (optional)</Text>
+          <TextInput style={styles.negative} value={negativePrompt} onChangeText={setNegativePrompt} editable={!busy} maxLength={1000} placeholder="static, blurry, distorted, text" placeholderTextColor={C.text3} />
+
+          <Text style={styles.label}>Steps</Text>
+          <View style={styles.presets}>
+            {STEP_PRESETS.map((preset) => (
+              <Pressable key={preset.value} style={[styles.preset, steps === preset.value && styles.presetOn]} onPress={() => setSteps(preset.value)} disabled={busy}>
+                <Text style={[styles.presetLabel, steps === preset.value && { color: C.accent }]}>{preset.label}</Text>
+                <Text style={styles.presetMeta}>{preset.value}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.label}>Length at 8 fps</Text>
+          <View style={styles.presets}>
+            {FRAME_PRESETS.map((preset) => (
+              <Pressable key={preset.value} style={[styles.preset, frames === preset.value && styles.presetOn]} onPress={() => setFrames(preset.value)} disabled={busy}>
+                <Text style={[styles.presetLabel, frames === preset.value && { color: C.accent }]}>{preset.label}</Text>
+                <Text style={styles.presetMeta}>{preset.value}f</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.warning}>Start with 5 frames / 1 step. Longer passes can take hours and heat the phone heavily.</Text>
+
+          <View style={styles.seedRow}>
+            <View style={{ flex: 1 }}><Text style={styles.label}>Seed</Text><Text style={styles.seedValue}>{seed}</Text></View>
+            <Pressable style={styles.randomButton} onPress={() => setSeed(Math.floor(Math.random() * 2_147_483_647))} disabled={busy}>
+              <Ionicons name="shuffle" size={17} color={C.accent} /><Text style={styles.actionText}>Random</Text>
+            </Pressable>
+          </View>
+
+          {generating && (
+            <View style={styles.progressCard}>
+              <View style={styles.progressTop}>
+                <Text style={styles.progressLabel}>{progress ? `Processing ${progress.completed} of ${progress.total}` : "Loading Wan"}</Text>
+                <Text style={styles.progressPct}>{Math.round(generationFraction * 100)}%</Text>
+              </View>
+              <View style={styles.track}><View style={[styles.fill, { width: `${Math.round(generationFraction * 100)}%` }]} /></View>
+              <Text style={styles.progressHint}>Chat is unloaded until the native video process exits.</Text>
+            </View>
+          )}
+
+          {result && <GeneratedVideo result={result} />}
+
+          {generating ? (
+            <Pressable
+              style={[styles.cancelButton, cancelling && styles.disabled]}
+              disabled={cancelling}
+              onPress={() => { setCancelling(true); void cancelLocalVideo().finally(() => setCancelling(false)); }}
+            >
+              <Ionicons name="stop-circle-outline" size={19} color={C.red} /><Text style={styles.dangerText}>{cancelling ? "Stopping…" : "Cancel generation"}</Text>
+            </Pressable>
+          ) : (
+            <Pressable style={[styles.generateButton, (!prompt.trim() || !status.active) && styles.disabled]} disabled={!prompt.trim() || !status.active} onPress={() => { void generate(); }}>
+              <Ionicons name="videocam" size={19} color={C.bg} /><Text style={styles.generateText}>Generate on phone</Text>
+            </Pressable>
+          )}
+        </>
+      )}
+
+      <Text style={styles.foot}>Experimental: Saient drives a pinned stable-diffusion.cpp/ggml Wan backend locally. No cloud inference and no Vercel.</Text>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.bg },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  h1: { color: C.text, fontSize: 24, fontWeight: "800" },
+  sub: { color: C.text2, fontSize: 13, marginTop: 3 },
+  state: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, height: 30 },
+  stateReady: { borderColor: C.green, backgroundColor: "rgba(54,211,153,0.08)" },
+  stateWaiting: { borderColor: C.amber, backgroundColor: "rgba(245,179,66,0.08)" },
+  setupCard: { alignItems: "center", padding: 22, backgroundColor: C.bg2, borderRadius: 16, borderWidth: 1, borderColor: C.border },
+  setupIcon: { width: 72, height: 72, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: C.bg3, marginBottom: 14 },
+  setupTitle: { color: C.text, fontSize: 18, fontWeight: "800", textAlign: "center" },
+  setupText: { color: C.text2, fontSize: 13, lineHeight: 20, textAlign: "center", marginTop: 8 },
+  setupMeta: { color: C.text3, fontSize: 11, fontFamily: "monospace", marginTop: 10, textAlign: "center" },
+  primary: { width: "100%", minHeight: 48, backgroundColor: C.accent, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 18 },
+  primaryText: { color: C.bg, fontSize: 14, fontWeight: "800" },
+  downloadProgress: { width: "100%", marginTop: 12 },
+  licenseButton: { marginTop: 12, minHeight: 32, justifyContent: "center" },
+  licenseText: { color: C.text3, fontSize: 10, textDecorationLine: "underline" },
+  statusMessage: { color: C.text3, fontSize: 11, textAlign: "center", marginTop: 12 },
+  modelCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.bg2, borderWidth: 1, borderColor: C.green, borderRadius: 12, padding: 14, marginBottom: 18 },
+  modelName: { color: C.text, fontSize: 14, fontWeight: "700" },
+  modelMeta: { color: C.text3, fontSize: 11, marginTop: 3 },
+  label: { color: C.text2, fontSize: 12, fontWeight: "700", marginBottom: 7, marginTop: 12 },
+  prompt: { minHeight: 104, color: C.text, backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 13, fontSize: 14, textAlignVertical: "top" },
+  negative: { height: 48, color: C.text, backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 13, fontSize: 13 },
+  presets: { flexDirection: "row", gap: 7 },
+  preset: { flex: 1, minHeight: 58, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border },
+  presetOn: { borderColor: C.accent, backgroundColor: "rgba(124,92,255,0.10)" },
+  presetLabel: { color: C.text2, fontSize: 12, fontWeight: "700" },
+  presetMeta: { color: C.text3, fontSize: 9, marginTop: 3 },
+  warning: { color: C.amber, fontSize: 10, lineHeight: 15, marginTop: 9 },
+  seedRow: { flexDirection: "row", alignItems: "flex-end", marginTop: 6 },
+  seedValue: { color: C.text, fontFamily: "monospace", fontSize: 14 },
+  randomButton: { height: 38, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 9, backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border },
+  actionText: { color: C.accent, fontSize: 12, fontWeight: "700" },
+  progressCard: { marginTop: 18, backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 14 },
+  progressTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  progressLabel: { color: C.text, fontSize: 13, fontWeight: "700" },
+  progressPct: { color: C.accent, fontSize: 12, fontFamily: "monospace" },
+  track: { height: 7, backgroundColor: C.bg3, borderRadius: 4, overflow: "hidden", marginTop: 10 },
+  fill: { height: 7, backgroundColor: C.accent, borderRadius: 4 },
+  progressHint: { color: C.text3, fontSize: 10, lineHeight: 15, marginTop: 9, textAlign: "center" },
+  resultCard: { marginTop: 18, overflow: "hidden", backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border, borderRadius: 14 },
+  video: { width: "100%", aspectRatio: 416 / 240, backgroundColor: C.bg3 },
+  resultBottom: { flexDirection: "row", alignItems: "center", gap: 7, padding: 12 },
+  resultMeta: { color: C.text2, fontSize: 11, flex: 1 },
+  generateButton: { minHeight: 52, marginTop: 18, borderRadius: 13, backgroundColor: C.accent, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  generateText: { color: C.bg, fontSize: 15, fontWeight: "800" },
+  cancelButton: { minHeight: 50, marginTop: 18, borderRadius: 13, borderWidth: 1, borderColor: C.red, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  textButton: { alignSelf: "center", minHeight: 38, justifyContent: "center", marginTop: 6, paddingHorizontal: 12 },
+  dangerText: { color: C.red, fontSize: 14, fontWeight: "700" },
+  foot: { color: C.text3, fontSize: 11, lineHeight: 17, textAlign: "center", marginTop: 20 },
+  disabled: { opacity: 0.45 },
+});

@@ -1,103 +1,98 @@
-# Saient
+# Saient Mobile
 
 **Local-first mobile AI. Chat, image generation, and text-to-video — all
 running entirely on your phone. No cloud, no API keys, nothing leaves
 the device.**
 
-Saient is an Android app (iOS in progress) that runs a full generative
-AI stack on-device: an LLM for chat, Stable Diffusion for images, and
-**Wan2.1 for text-to-video** — the headline feature. Verified running
-end-to-end on a stock Samsung Galaxy S24, generating real video clips
-from a text prompt using only the phone's own Vulkan GPU.
+Saient is a local-first mobile AI app. The app owns and ships the Quartz ARM64
+runtime; language models are downloaded separately into the app's private
+storage and are not baked into the application package.
 
-The inference engine behind the chat and image side of the app,
-**Quartz**, is open source: [github.com/SaientAI/saient-quartz](https://github.com/SaientAI/saient-quartz).
-This repository documents the mobile app itself.
+**Headline capability:** on-device text-to-video with
+[Wan2.1 T2V 1.3B](https://github.com/Wan-Video/Wan2.1) — verified
+running end-to-end on a stock Samsung Galaxy S24's Vulkan GPU. See
+[docs/VIDEO_PIPELINE.md](docs/VIDEO_PIPELINE.md) for exactly how
+prompt → video happens on-device, backend split, memory budget, and all.
 
----
+The LLM/SDXL inference engine this app ships, **Quartz**, is developed
+in its own open-source repo:
+[SaientAI/saient-quartz](https://github.com/SaientAI/saient-quartz) (MIT).
 
-## What it does
+## Current features
 
-- **On-device text-to-video** — type a prompt, get a real video clip,
-  generated locally by [Wan2.1 T2V 1.3B](https://github.com/Wan-Video/Wan2.1),
-  quantized for mobile. No render farm, no cloud job queue — the
-  diffusion transformer runs on your phone's GPU right now, in front
-  of you.
-- **On-device LLM chat** — a local language model streams responses
-  over a loopback HTTP/SSE connection to a native inference engine
-  running inside the app (same engine, same API contract as the
-  Saient desktop app).
-- **On-device image generation** — SDXL text-to-image at 1024×1024,
-  running through the same local engine.
-- **Agent tools** — the chat assistant can use contacts, calls, SMS,
-  and web lookup on-device.
-- **Paired desktop Studio** — optionally pair with a Saient desktop
-  instance on your LAN for heavier generation jobs, with resumable
-  job monitoring back on the phone.
+- On-device chat through Quartz's localhost HTTP/SSE API
+- First-run model guidance, Downloads-folder GGUF imports, device-aware model sizing, and reloadable app-private chat history
+- Downloadable model catalog with an offline fallback
+- Agent tools for contacts, calls, SMS, and web lookup
+- A paired Studio for desktop image generation and WAN image-to-video
+- Camera and system-photo-picker input with a native image quality gate
+- Resumable desktop render monitoring and local generated-media storage
+- Direct, resumable SDXL FP16 download from Saient's self-hosted Raspberry Pi,
+  followed by per-file SHA-256 checks and Quartz validation before atomic install
+- On-device 1024×1024 image generation through Quartz-owned model parsing,
+  tokenization, scheduling, operators, memory management, and Vulkan dispatch
 
-## Mobile-first architecture
+Studio pairing uses a versioned QR payload and stores its bearer token in the
+platform secure store. Plain HTTP desktop addresses are accepted only for
+loopback, private LAN, link-local, `.local`, or `localhost` hosts; public hosts
+must use HTTPS. Private-LAN HTTP traffic is still unencrypted on the network,
+so use only a trusted LAN until the desktop transport supports TLS.
 
-Two native binaries do the actual compute work, both supervised by a
-foreground Android service so generation survives backgrounding and
-stays scheduled on the phone's performance cores:
+## Development
 
-| Engine | Handles | Backend |
-|---|---|---|
-| **Quartz** ([open source](https://github.com/SaientAI/saient-quartz)) | LLM chat + SDXL images | CPU (NEON) or Vulkan |
-| **Wan video engine** | Wan2.1 text-to-video | split CPU (text encoder + VAE) / Vulkan (diffusion transformer) |
-
-Only one engine runs at a time — the app pauses chat before a video or
-image job starts, and resumes it afterward. Video generation uses
-disk-paged weight loading, VRAM caps, and VAE tiling to fit a
-multi-gigabyte model pipeline into a phone's shared memory budget.
-Models are downloaded on first use (not bundled in the app package)
-and verified file-by-file with SHA-256 before being installed.
-
-## Features
-
-- Local text-to-video with Wan2.1 T2V 1.3B (416×240, 5–41 frames in
-  4-frame steps, 8fps)
-- Local LLM chat with streaming responses, first-run model guidance,
-  Downloads-folder GGUF import, and persistent app-private chat history
-- Local SDXL image generation at 1024×1024
-- Resumable, integrity-checked model downloads with an offline fallback
-  catalog
-- Agent tools: contacts, calls, SMS, web lookup
-- Camera and photo-picker input with a native image-quality gate
-- Optional paired desktop Studio for heavier jobs, with a versioned QR
-  pairing flow and secure-store bearer token
-
-## Installation
-
-Saient mobile is not yet published to an app store. To build and run
-it yourself:
+The app contains custom native modules and requires a native development build;
+Expo Go is not sufficient.
 
 ```bash
-git clone <this repo's app source repository>
-cd saient-mobile
 npm ci
 npx expo prebuild --platform android --no-install
 npm run android
 ```
 
-The app requires a native development build — **Expo Go is not
-sufficient**, since it depends on custom native modules (the inference
-engines, foreground service, and native device integrations).
-
-A production release build with proper signing:
+Useful checks:
 
 ```bash
-npm run android:signing:init   # once, to establish your upload key
-npm run android:release
+npm run lint
+npm run typecheck
+npm run test:security
+npm run doctor
 ```
+
+The current release is exercised on a physical ARM64 Samsung SM-S921B running
+Android 16. iOS native code must be compiled and exercised on macOS with
+Xcode before an iOS release.
+
+## Production release
+
+Run `npm run android:signing:init` once to establish the Android upload key,
+then run `npm run android:release`. The release command fails closed without
+production signing credentials,
+rejects Android's debug certificate, runs the project checks, and archives the
+APK, AAB, R8 mapping, native symbols, and SHA-256 checksums.
+
+See [release/README.md](release/README.md) for signing and release details.
+
+See [docs/VIDEO_PIPELINE.md](docs/VIDEO_PIPELINE.md) for how on-device
+Wan2.1 video generation works end to end.
+
+## Layout
+
+- `app/` — Expo Router screens
+- `lib/quartz.ts` — on-device Quartz streaming client
+- `lib/models.ts` — model catalog, downloads, and active-model state
+- `lib/desktop.ts` — paired desktop generation client and job persistence
+- `plugins/` — durable Expo prebuild configuration
+- `modules/` — Saient native Android/iOS modules
+- `engine/arm64-v8a/` — Saient's bundled Quartz ARM64 runtime
+- `docs/` — architecture write-ups (video pipeline)
 
 ## Supported hardware
 
 | | Status |
 |---|---|
-| Android, ARM64, Vulkan-capable GPU | ✅ Verified — developed and tested on a Samsung Galaxy S24 (SM-S921B), Android 16 |
-| Android, no Vulkan / older GPU | ⚠️ Chat (CPU-only) works; video and image generation need Vulkan |
-| iOS | 🚧 In progress — native code must be built and exercised on macOS with Xcode before an iOS release |
+| Android, ARM64, Vulkan-capable GPU | Verified — developed and tested on a Samsung Galaxy S24 (SM-S921B), Android 16 |
+| Android, no Vulkan / older GPU | Chat (CPU-only) works; video and SDXL image generation need Vulkan |
+| iOS | In progress — native code must be built and exercised on macOS with Xcode before an iOS release (see `ios/`) |
 
 ## Requirements
 
@@ -144,22 +139,14 @@ No. There's no login and no API key for on-device generation.
 Yes, once models are downloaded. The initial download needs a
 connection; generation itself does not.
 
-**What happens to my chat history / generated media?**
-Stored locally on the device, in the app's private storage. Nothing is
-uploaded unless you explicitly pair with and send a job to a desktop
-Studio instance.
-
 ## License
 
-The Saient mobile application itself is proprietary and closed-source;
-this repository is documentation, not source code. The on-device
-inference engine that powers its chat and image generation, **Quartz**,
-is open source under the MIT license: see
+MIT — see [`LICENSE`](LICENSE). The on-device inference engine this
+app embeds, Quartz, is separately MIT-licensed in its own repo:
 [SaientAI/saient-quartz](https://github.com/SaientAI/saient-quartz).
 
 ## Contributing
 
-This repository is documentation for the Saient mobile app, not its
-source tree. Bug reports and feature requests for the app are welcome
-as issues here. For engine-level contributions (inference, quantization,
-backends), see the [Quartz repository](https://github.com/SaientAI/saient-quartz).
+Issues and PRs welcome. For engine-level work (inference, quantization,
+backends), see the [Quartz repository](https://github.com/SaientAI/saient-quartz)
+instead — this repo is the mobile app that consumes it.

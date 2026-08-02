@@ -1,0 +1,30 @@
+{
+  "id": "wan2.1-t2v-1.3b-q2-v3",
+  "totalBytes": 2934120854,
+  "files": [
+    {
+      "path": "wan2.1_t2v_1.3B_Q4_K.gguf",
+      "bytes": 816061024,
+      "sha256": "65181afff758fba25cf311399ccb0638a746f8e0e6533e07a84a5a23e0c12318"
+    },
+    {
+      "path": "umt5-xxl-encoder-Q2_K.gguf",
+      "bytes": 1864244512,
+      "sha256": "dc2f64c2b8a99f7c526cdab5e061ab242785ed991cbfca3966758fae7d166cd0"
+    },
+    {
+      "path": "wan_2.1_vae.safetensors",
+      "bytes": 253815318,
+      "sha256": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    }
+  ],
+  "hostSmoke": {
+    "width": 416,
+    "height": 240,
+    "frames": 5,
+    "fps": 8,
+    "steps": 1,
+    "elapsedSeconds": 219.72,
+    "sha256": "8527e5a4c296ff9f187a66898aec2558e5d4e067c274030a68a6b0b16d56a938"
+  }
+}

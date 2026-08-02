@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly SERIAL="${SAIENT_S24_SERIAL:-RZCX7203VBL}"
+readonly PHONE_PORT="${SAIENT_S24_PHONE_PORT:-18700}"
+readonly HOST_PORT="${SAIENT_S24_HOST_PORT:-18700}"
+
+last_state=""
+while true; do
+  state="$(adb -s "$SERIAL" get-state 2>/dev/null || true)"
+  if [[ "$state" == "device" ]]; then
+    if adb -s "$SERIAL" reverse \
+      "tcp:${PHONE_PORT}" "tcp:${HOST_PORT}" >/dev/null 2>&1; then
+      next_state="connected"
+    else
+      next_state="reverse-failed"
+    fi
+  else
+    next_state="waiting"
+  fi
+  if [[ "$next_state" != "$last_state" ]]; then
+    printf 'Saient S24 USB bridge: %s\n' "$next_state"
+    last_state="$next_state"
+  fi
+  sleep 3
+done

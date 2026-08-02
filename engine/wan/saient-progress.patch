@@ -1,0 +1,70 @@
+diff --git a/examples/cli/main.cpp b/examples/cli/main.cpp
+index af62a9a..0fc946e 100644
+--- a/examples/cli/main.cpp
++++ b/examples/cli/main.cpp
+@@ -32,6 +32,14 @@ const char* previews_str[] = {
+ 
+ std::regex format_specifier_regex("(?:[^%]|^)(?:%%)*(%\\d{0,3}d)");
+ 
++// Keep a newline-delimited progress signal for the Android process bridge. The
++// stock terminal progress bar uses carriage returns, which BufferedReader does
++// not surface until the operation has already finished.
++static void saient_progress_callback(int step, int steps, float, void*) {
++    fprintf(stderr, "SAIENT_WAN_PROGRESS completed=%d total=%d\n", step, steps);
++    fflush(stderr);
++}
++
+ struct SDCliParams {
+     SDMode mode             = IMG_GEN;
+     std::string output_path = "output.png";
+@@ -637,6 +645,7 @@ int main(int argc, const char* argv[]) {
+ 
+     parse_args(argc, argv, cli_params, ctx_params, gen_params);
+     sd_set_log_callback(sd_log_cb, (void*)&cli_params);
++    sd_set_progress_callback(saient_progress_callback, nullptr);
+     log_verbose = cli_params.verbose;
+     log_color   = cli_params.color;
+ 
+diff --git a/src/core/ggml_extend.hpp b/src/core/ggml_extend.hpp
+index d14d287..6c26dd3 100644
+--- a/src/core/ggml_extend.hpp
++++ b/src/core/ggml_extend.hpp
+@@ -2391,13 +2391,11 @@ protected:
+                plan.valid &&
+                max_graph_vram_bytes > 0 &&
+                plan.segments.size() > 1 &&
+-               !sd_backend_is_cpu(runtime_backend) &&
+                !is_multi_device();
+     }
+ 
+     bool can_attempt_graph_cut_segmented_compute() const {
+         return max_graph_vram_bytes > 0 &&
+-               !sd_backend_is_cpu(runtime_backend) &&
+                !is_multi_device();
+     }
+ 
+@@ -2738,6 +2736,7 @@ protected:
+             ~GraphWeightDoneGuard() {
+                 if (enabled && runner != nullptr && tensors != nullptr) {
+                     runner->free_compute_backend_param_tensors(*tensors);
++                    runner->free_params_backend_param_tensors(*tensors);
+                 }
+             }
+ 
+@@ -3430,7 +3429,15 @@ public:
+ };
+ 
+ __STATIC_INLINE__ bool support_get_rows(ggml_type wtype) {
+-    std::set<ggml_type> allow_types = {GGML_TYPE_F16, GGML_TYPE_Q8_0, GGML_TYPE_Q5_1, GGML_TYPE_Q5_0, GGML_TYPE_Q4_1, GGML_TYPE_Q4_0};
++    std::set<ggml_type> allow_types = {
++        GGML_TYPE_F16,
++        GGML_TYPE_Q8_0,
++        GGML_TYPE_Q5_1,
++        GGML_TYPE_Q5_0,
++        GGML_TYPE_Q4_1,
++        GGML_TYPE_Q4_0,
++        GGML_TYPE_Q2_K,
++    };
+     if (allow_types.find(wtype) != allow_types.end()) {
+         return true;
+     }
