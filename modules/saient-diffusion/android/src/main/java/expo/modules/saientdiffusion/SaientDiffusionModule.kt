@@ -30,10 +30,26 @@ private const val MAX_IMPORT_DEPTH = 8
 private const val ENGINE_PORT = 18_799
 private const val MODEL_HOST = "saient.co.uk"
 private const val DOWNLOAD_HEADROOM_BYTES = 134_217_728L
-private const val WAN_PACK_ID = "wan2.1-t2v-1.3b-q2-v3"
+private const val WAN_PACK_ID = "wan2.1-t2v-1.3b-q4-v1"
 private const val WAN_WIDTH = 416
 private const val WAN_HEIGHT = 240
 private const val WAN_FPS = 8
+
+// Upstream Wan2.1 recommends --sample_shift 8 for T2V-1.3B (range 8-12). Shipping 3.0
+// left the flow-matching schedule with too little time in the high-noise structural
+// phase, so subjects never resolved into solid bodies — they came out ghost-like.
+private const val WAN_FLOW_SHIFT = "8.0"
+
+// Wan2.1's own default negative prompt (wan/configs/shared_config.py upstream). Most of
+// its clauses target human anatomy failures — extra fingers, poorly drawn hands/faces,
+// deformed, disfigured, malformed limbs, fused fingers, three legs — plus 整体发灰
+// ("overall gray") and 过曝 ("overexposed"), which are exactly the washed-out, garish
+// artefacts we were shipping. Sending an empty negative prompt threw all of that away,
+// which is why non-human subjects held up far better than people did.
+private const val WAN_DEFAULT_NEGATIVE =
+  "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，" +
+    "JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，" +
+    "手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
 
 private data class RemoteModelFile(
   val path: String,
@@ -68,7 +84,9 @@ private fun wanModelFile(path: String) = "https://$MODEL_HOST/models/$WAN_PACK_I
 
 private val REMOTE_WAN_FILES = listOf(
   RemoteModelFile("wan2.1_t2v_1.3B_Q4_K.gguf", wanModelFile("wan2.1_t2v_1.3B_Q4_K.gguf"), 816_061_024, "65181afff758fba25cf311399ccb0638a746f8e0e6533e07a84a5a23e0c12318"),
-  RemoteModelFile("umt5-xxl-encoder-Q2_K.gguf", wanModelFile("umt5-xxl-encoder-Q2_K.gguf"), 1_864_244_512, "dc2f64c2b8a99f7c526cdab5e061ab242785ed991cbfca3966758fae7d166cd0"),
+  // Q2_K quantisation of UMT5-XXL destroyed the conditioning detail humans need: subjects
+  // failed to hold an identity across frames and dissolved mid-clip. Q4_K_M fixes it.
+  RemoteModelFile("umt5-xxl-encoder-Q4_K_M.gguf", wanModelFile("umt5-xxl-encoder-Q4_K_M.gguf"), 3_655_145_312, "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40"),
   RemoteModelFile("wan_2.1_vae.safetensors", wanModelFile("wan_2.1_vae.safetensors"), 253_815_318, "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"),
 )
 
@@ -908,10 +926,15 @@ class SaientDiffusionModule : Module() {
       throw DiffusionException("The Wan video model is inactive. Activate it before generating.")
     }
     val prompt = options.prompt.trim()
-    val negative = options.negativePrompt.trim()
-    if (prompt.isEmpty() || prompt.length > 1_000 || negative.length > 1_000) {
+    val userNegative = options.negativePrompt.trim()
+    if (prompt.isEmpty() || prompt.length > 1_000 || userNegative.length > 1_000) {
       throw DiffusionException("Prompt text must be between 1 and 1,000 characters.")
     }
+    // Always keep Wan's own negative prompt as the quality floor; anything the user types
+    // is appended to it rather than replacing it. Shipping a bare empty string here is what
+    // let malformed faces, hands and limbs through unopposed.
+    val negative =
+      if (userNegative.isEmpty()) WAN_DEFAULT_NEGATIVE else "$WAN_DEFAULT_NEGATIVE，$userNegative"
     if (options.steps !in 1..20) throw DiffusionException("Wan generation supports 1 to 20 steps.")
     if (!options.guidance.isFinite() || options.guidance !in 0.0..30.0) {
       throw DiffusionException("Guidance must be between 0 and 30.")
@@ -944,7 +967,7 @@ class SaientDiffusionModule : Module() {
       "--mode", "vid_gen",
       "--diffusion-model", File(root, "wan2.1_t2v_1.3B_Q4_K.gguf").path,
       "--vae", File(root, "wan_2.1_vae.safetensors").path,
-      "--t5xxl", File(root, "umt5-xxl-encoder-Q2_K.gguf").path,
+      "--t5xxl", File(root, "umt5-xxl-encoder-Q4_K_M.gguf").path,
       "--prompt", prompt,
       "--negative-prompt", negative,
       "--cfg-scale", options.guidance.toString(),
@@ -954,7 +977,7 @@ class SaientDiffusionModule : Module() {
       "--height", WAN_HEIGHT.toString(),
       "--video-frames", options.frames.toString(),
       "--fps", WAN_FPS.toString(),
-      "--flow-shift", "3.0",
+      "--flow-shift", WAN_FLOW_SHIFT,
       "--seed", options.seed.toString(),
       "--threads", "6",
       "--diffusion-fa",

@@ -67,7 +67,7 @@ if [[ "${SAIENT_SKIP_NPM_CI:-false}" != true ]]; then
 fi
 npm run lint
 npm run typecheck
-npm run test:security
+npm run test:wan
 npm run test:models
 npm run doctor
 npm audit --audit-level=high

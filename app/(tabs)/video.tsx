@@ -23,10 +23,13 @@ import {
   type VideoProgress,
 } from "@/modules/saient-diffusion";
 
+// Below 8 steps Wan cannot resolve a human subject at all — 1 step renders a flat colour
+// field and 4 renders a translucent silhouette. Those are not "fast" presets, they are
+// broken ones, so the ladder now starts where output is actually usable.
 const STEP_PRESETS = [
-  { value: 1, label: "Smoke" },
-  { value: 4, label: "Draft" },
-  { value: 8, label: "Quality" },
+  { value: 8, label: "Standard" },
+  { value: 12, label: "High" },
+  { value: 20, label: "Max" },
 ];
 
 const FRAME_PRESETS = [
@@ -75,7 +78,7 @@ export default function VideoScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
-  const [steps, setSteps] = useState(1);
+  const [steps, setSteps] = useState(8);
   const [frames, setFrames] = useState(5);
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 2_147_483_647));
   const [progress, setProgress] = useState<VideoProgress | null>(null);
@@ -185,9 +188,9 @@ export default function VideoScreen() {
           <View style={styles.setupIcon}><Ionicons name="videocam-outline" size={34} color={C.accent} /></View>
           <Text style={styles.setupTitle}>Add the Wan video pack</Text>
           <Text style={styles.setupText}>
-            Download the quantized Wan2.1 1.3B transformer, UMT5 encoder and VAE from the Saient Pi. Every file is SHA-256 checked before installation.
+            Download the quantized Wan2.1 1.3B transformer, UMT5-XXL Q4_K_M encoder and VAE from the Saient Pi. Every file is SHA-256 checked before installation.
           </Text>
-          <Text style={styles.setupMeta}>2.93 GB · 416×240 test profile · offline after setup</Text>
+          <Text style={styles.setupMeta}>4.73 GB · 416×240 profile · offline after setup</Text>
           <Pressable style={[styles.primary, busy && styles.disabled]} onPress={() => { void download(); }} disabled={busy || !status?.available}>
             <Ionicons name="download-outline" size={18} color={C.bg} />
             <Text style={styles.primaryText}>{downloading ? `Downloading ${Math.floor(downloadFraction * 100)}%` : "Download Wan pack"}</Text>
@@ -261,7 +264,7 @@ export default function VideoScreen() {
               </Pressable>
             ))}
           </View>
-          <Text style={styles.warning}>Start with 5 frames / 1 step. Longer passes can take hours and heat the phone heavily.</Text>
+          <Text style={styles.warning}>Start with 5 frames at Standard. Longer clips and higher step counts take considerably longer and heat the phone.</Text>
 
           <View style={styles.seedRow}>
             <View style={{ flex: 1 }}><Text style={styles.label}>Seed</Text><Text style={styles.seedValue}>{seed}</Text></View>

@@ -10,7 +10,8 @@
   "localPatch": "saient-progress.patch",
   "artifact": {
     "path": "../arm64-v8a/libquartz-wan.so",
-    "bytes": 82749824,
-    "sha256": "d06ab10ffcb6a85ab0453b4888618188a0776790a77f47b823f6fb0ef4971086"
-  }
+    "bytes": 82749840,
+    "sha256": "7f18eb1337e70bc69cbbd21adfe7a7bfe56401e50c33c7a41747104f6bfa49ca"
+  },
+  "localPatchNotes": "newline-delimited progress for the Android bridge; CPU graph-cut segmented compute; free params-backend tensors after each graph; K-quant token embeddings via get_rows (avoids materialising the UMT5-XXL embedding matrix, -2.45GB peak RSS)"
 }

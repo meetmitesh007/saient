@@ -7,6 +7,10 @@ phone, with no cloud call. Verified against the current source of
 `engine/wan/*.json`, and against a live generation observed via `adb`
 on a Samsung SM-S921B (S24) mid-run.
 
+📹 **[End-to-end proof video](https://youtu.be/ZXc5hBgoro0)** — a full
+generation recorded on the device with Wi-Fi and mobile data switched off.
+There is no network path a cloud call could take.
+
 ## The two engines
 
 Saient runs **two independent native binaries**, both supervised through
@@ -27,19 +31,19 @@ concurrently is not attempted.
 ## Model pack
 
 Wan2.1 T2V 1.3B, quantized for mobile, pinned in
-`engine/wan/MODEL_PACK_LOCK.json` as pack id `wan2.1-t2v-1.3b-q2-v3`
-(2.93 GB total):
+`engine/wan/MODEL_PACK_LOCK.json` as pack id `wan2.1-t2v-1.3b-q4-v1`
+(4.73 GB total):
 
 | File | Size | Purpose |
 |---|---|---|
 | `wan2.1_t2v_1.3B_Q4_K.gguf` | 816 MB | the diffusion transformer, Q4_K quantized |
-| `umt5-xxl-encoder-Q2_K.gguf` | 1.86 GB | UMT5-XXL text encoder, Q2_K quantized |
+| `umt5-xxl-encoder-Q4_K_M.gguf` | 3.66 GB | UMT5-XXL text encoder, Q4_K_M quantized |
 | `wan_2.1_vae.safetensors` | 254 MB | video VAE, fp16 |
 
-The lock file also records a **host smoke-test result** — a known-good
-reference render (416×240, 5 frames, 1 step, 219.72s, with an expected
-output SHA-256) used to catch silent regressions in the engine build
-without needing a phone in the loop.
+The lock file also records a **host smoke-test result** and a
+**`samplerProfile`** — the sampler settings these weights are validated
+against, so a future change that silently reverts them fails the
+`npm run test:wan` contract check.
 
 ## Stage 1 — acquiring the model (download & install)
 
@@ -103,11 +107,12 @@ one process per generation, with explicit CLI args:
 libquartz-wan.so --mode vid_gen
   --diffusion-model wan2.1_t2v_1.3B_Q4_K.gguf
   --vae wan_2.1_vae.safetensors
-  --t5xxl umt5-xxl-encoder-Q2_K.gguf
-  --prompt "<user prompt>" --negative-prompt "<user negative>"
+  --t5xxl umt5-xxl-encoder-Q4_K_M.gguf
+  --prompt "<user prompt>"
+  --negative-prompt "<Wan2.1 upstream negative prompt>[，<user negative>]"
   --cfg-scale <guidance> --sampling-method euler
-  --steps <1-20> --width 416 --height 240
-  --video-frames <5-41, step 4> --fps 8 --flow-shift 3.0
+  --steps <8-20> --width 416 --height 240
+  --video-frames <5-41, step 4> --fps 8 --flow-shift 8.0
   --seed <0-2147483647> --threads 6 --diffusion-fa
   --backend te=cpu,vae=cpu,diffusion=vulkan0
   --params-backend disk
@@ -141,6 +146,38 @@ Key choices baked into these flags, and why:
 - **`--threads 6`** — matches the `RAYON_NUM_THREADS=6` the chat
   engine is capped to elsewhere, tuned for the device's number of
   performance cores.
+
+### Why these quality settings (and what they fixed)
+
+![Wan2.1 quality before and after](wan-quality-before-after.png)
+
+*Identical seed (12345), identical step count (8), identical prompt
+("A realistic adult woman standing in a naturally lit modern kitchen…").
+The only differences are the three settings named below.*
+
+
+Three of the values above are not arbitrary — shipping the wrong ones
+produced ghost-like, washed-out, malformed human subjects while
+non-human subjects looked comparatively fine:
+
+- **`--flow-shift 8.0`** — upstream Wan2.1 specifies `--sample_shift 8`
+  (range 8–12) for T2V-1.3B. We shipped `3.0`, which left the
+  flow-matching schedule too little time in the high-noise structural
+  phase, so bodies never consolidated and came out translucent.
+- **The negative prompt is never empty.** Wan2.1's own upstream
+  `sample_neg_prompt` is always applied, with any user text appended to
+  it. Most of its clauses target human anatomy specifically (extra
+  fingers, poorly drawn hands and faces, deformed, disfigured, malformed
+  limbs, fused fingers, three legs) plus 整体发灰 "overall gray" and
+  过曝 "overexposed". Sending an empty string left all of that
+  unopposed — which is precisely why people failed and foxes didn't.
+- **UMT5-XXL at Q4_K_M, not Q2_K.** Q2_K destroyed the conditioning
+  detail needed to hold a human identity, so subjects dissolved partway
+  through a clip. This is the single largest contributor and the reason
+  the pack grew from 2.93 GB to 4.73 GB.
+- **Minimum 8 steps.** Below 8, Wan cannot resolve a person at all: 1
+  step renders a flat colour field and 4 renders a translucent
+  silhouette. The step ladder starts at 8 for that reason.
 
 Live confirmation (read via `adb shell ps` / `dumpsys` on the S24 while
 a generation was in flight, without touching the device): the process
