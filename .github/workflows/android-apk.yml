@@ -1,0 +1,83 @@
+# CI smoke build for the Android APK.
+#
+# This exists so an APK can be produced without an Android toolchain on the
+# developer's machine. It deliberately changes nothing about release signing:
+# it uses the existing SAIENT_ALLOW_DEBUG_RELEASE escape hatch documented in
+# plugins/withReleaseSigning.js, so the artifact is debug-signed and is NOT a
+# Play upload. Production releases still come from `npm run android:release`,
+# which refuses that flag and pins the upload certificate.
+
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # `npm ci` is not usable here: this repo's package-lock.json is missing
+      # @emnapi/core and @emnapi/runtime, so npm ci exits EUSAGE ("package.json and
+      # package-lock.json are not in sync"). The private source repo uses npm ci.
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install --non-interactive
+
+      # `expo prebuild` regenerates android/gradle.properties from the Expo
+      # template, whose 2048m heap makes `:app:packageRelease` fail with
+      # "OutOfMemoryError: Java heap space" while zipflinger deflates the
+      # native .so payload. The heap must therefore be raised *after* prebuild
+      # or the setting is silently discarded. Values match
+      # scripts/build-android-release.sh so CI and the release path agree.
+      - name: Raise the Gradle heap
+        run: |
+          set -Eeuo pipefail
+          GRADLE_PROPERTIES=android/gradle.properties
+          if grep -q '^org.gradle.jvmargs=' "$GRADLE_PROPERTIES"; then
+            sed -i 's|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=1024m|' "$GRADLE_PROPERTIES"
+          else
+            printf '\norg.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=1024m\n' >> "$GRADLE_PROPERTIES"
+          fi
+          printf 'org.gradle.workers.max=2\norg.gradle.parallel=false\n' >> "$GRADLE_PROPERTIES"
+          grep -q '^org.gradle.jvmargs=-Xmx6144m ' "$GRADLE_PROPERTIES" || {
+            echo "Failed to raise the Gradle heap; the packaging step would run out of memory." >&2
+            exit 2
+          }
+          cat "$GRADLE_PROPERTIES"
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build APK
+        working-directory: android
+        env:
+          SAIENT_ALLOW_DEBUG_RELEASE: 'true'
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: saient-apk-debug-signed-NOT-FOR-PLAY
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
