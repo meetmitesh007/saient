@@ -1,0 +1,40 @@
+name: Build MediaTek CPU-Only APK
+
+on:
+  workflow_dispatch: # Allows you to manually trigger the build whenever you want
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'zulu'
+
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
+
+      # CRITICAL: This intercept patches the build flags before the Gradle step runs
+      - name: Patch Engine Build Flags for CPU-Only
+        run: |
+          echo "Disabling Vulkan GPU hooks..."
+          find . -name "CMakeLists.txt" -exec sed -i 's/SD_VULKAN=ON/SD_VULKAN=OFF/g' {} +
+          find . -name "CMakeLists.txt" -exec sed -i 's/GGML_VULKAN=ON/GGML_VULKAN=OFF/g' {} +
+
+      - name: Build Android App Bundle / APK
+        run: |
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Finished APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: saient-mediatek-cpu-only
+          path: app/build/outputs/apk/debug/*.apk
+          
