@@ -33,9 +33,9 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        packages: ''
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
         
 
       # `npm ci` is not usable here: this repo's package-lock.json is missing
