@@ -26,7 +26,7 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    # This steps prepares the script to build a test APK instead of a locked store file
+    # This fixes the installation issue and forces the script to build a test APK
     - name: Prepare and Run App Compiler
       run: |
         SCRIPT_PATH=$(find . -name "build-android-release.sh" -print -quit)
@@ -35,25 +35,30 @@ jobs:
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # 1. We force the app script to allow building test/debug APKs
+        # 1. We switch the broken 'npm ci' to a flexible 'npm install' command
+        sed -i 's/npm ci --include=dev/npm install --legacy-peer-deps/g' "$ABS_SCRIPT_PATH"
+        
+        # 2. We remove the strict exit error screens that block debug builds
         sed -i 's/exit 2/# exit 2/g' "$ABS_SCRIPT_PATH"
         sed -i 's/exit 4/# exit 4/g' "$ABS_SCRIPT_PATH"
         sed -i 's/exit 5/# exit 5/g' "$ABS_SCRIPT_PATH"
         
-        # 2. We skip strict security checks so it can complete on GitHub
+        # 3. Skip strict signing configurations for test mode
         export SAIENT_ALLOW_DEBUG_RELEASE="true"
-        export SAIENT_SKIP_NPM_CI="false"
+        export SAIENT_SKIP_NPM_CI="true" # Tells the script to skip its own npm ci line
         
-        # 3. Disable Vulkan requirements across background engines
+        # 4. Disable Vulkan graphics across background engines
         export QUARTZ_ANDROID_FEATURES="cpu"
         
-        # Run the build script
+        # Run the modified script
         $ABS_SCRIPT_PATH
 
-    # This searches for the newly created .apk file inside the generated build folder and saves it
+    # This step collects the newly created visual .apk file
     - name: Upload Finished Visual Installer APK
       uses: actions/upload-artifact@v4
       with:
         name: saient-visual-app
-        path: "android/app/build/outputs/apk/release/*.apk"
-        
+        path: |
+          android/app/build/outputs/apk/release/*.apk
+          android/app/build/outputs/apk/debug/*.apk
+          
