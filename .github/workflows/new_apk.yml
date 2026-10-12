@@ -1,0 +1,32 @@
+name: Build Android App
+
+on:
+  workflow_dispatch: # This adds a "Run" button so you can start it manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Download your code and your script file into GitHub's cloud computer
+    - name: Get code from repository
+      uses: actions/checkout@v4
+
+    # 2. Set up the Android building tools
+    - name: Set up Android NDK tools
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 34
+        build-tools: 34.0.0
+        ndk: 26.1.10909125
+
+    # 3. Set up the Rust tool (Cargo) which matches your script
+    - name: Set up Rust compiler
+      run: rustup target add aarch64-linux-android
+
+    # 4. Give permission to run your script and then run it!
+    - name: Run your build script
+      run: |
+        chmod +x ./build-android-arm64.sh
+        ./build-android-arm64.sh --no-default-features
+        
