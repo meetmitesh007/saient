@@ -19,19 +19,19 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This fixes the script typo automatically and runs the build without Vulkan
+    # This runs the script from the main folder so it can find Cargo.toml
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
         echo "Found script at: $SCRIPT_PATH"
         chmod +x "$SCRIPT_PATH"
-        cd $(dirname "$SCRIPT_PATH")
         
-        # 1. This automatically changes features="${}" to features="" to fix the crash
-        sed -i 's/features="${}"/features=""/g' build-android-arm64.sh
+        # 1. This fixes the features="${}" crash error automatically
+        sed -i 's/features="${}"/features=""/g' "$SCRIPT_PATH"
         
         # 2. This forces the builder to drop Vulkan and use normal processing
-        sed -i 's/cargo build/cargo build --no-default-features/g' build-android-arm64.sh
+        sed -i 's/cargo build/cargo build --no-default-features/g' "$SCRIPT_PATH"
         
-        ./build-android-arm64.sh
+        # 3. We run the script directly from the main folder instead of jumping into /scripts
+        $SCRIPT_PATH
         
