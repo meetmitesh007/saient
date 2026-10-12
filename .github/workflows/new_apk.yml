@@ -23,10 +23,10 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    # This new step installs Platform 33 so the packaging tool can build the APK
-    - name: Install Missing Android Platform 33
+    # This steps downloads the exact platform and build tools needed for Android 33
+    - name: Install Missing Android Platform and Build Tools 33
       run: |
-        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33"
+        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.2"
 
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
@@ -57,5 +57,7 @@ jobs:
         name: no-vulkan-installer-apk
         path: |
           app-code/target/aarch64-linux-android/release/apk/*.apk
+          app-code/target/aarch64-linux-android/debug/apk/*.apk
+          app-code/target/release/apk/*.apk
           app-code/target/debug/apk/*.apk
           
