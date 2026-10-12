@@ -8,14 +8,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. This safely downloads the official Saient application source code first
-    - name: Download Saient Source Code
+    # 1. This downloads the CORRECT Saient Quartz application source code
+    - name: Download Saient Quartz Source Code
       uses: actions/checkout@v4
       with:
-        repository: 'SaientAI/saient'
+        repository: 'SaientAI/saient-quartz'
         path: 'app-code'
 
-    # 2. This safely downloads your personal script repository into a separate folder
+    # 2. This safely downloads your personal script repository
     - name: Download Your Script
       uses: actions/checkout@v4
       with:
@@ -28,7 +28,7 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # 3. This automatically configures your script and runs it inside the source code folder
+    # 3. This runs the build inside the downloaded code folder using CPU instead of Vulkan
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find ./my-script-folder -name "build-android-arm64.sh" -print -quit)
@@ -38,14 +38,14 @@ jobs:
         
         # Repair the features="${}" typo in your script file automatically
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
-        
-        # Turn off Vulkan graphics inside your script automatically
-        sed -i 's/cargo build/cargo build --no-default-features/g' "$ABS_SCRIPT_PATH"
         chmod +x "$ABS_SCRIPT_PATH"
         
         # Step inside the downloaded code folder where Cargo.toml lives
         cd app-code
         
-        # Run the script to build your APK without Vulkan
+        # Official setting to compile on CPU and ignore Vulkan graphics requirements
+        export QUARTZ_ANDROID_FEATURES="cpu"
+        
+        # Trigger the script to build the app
         $ABS_SCRIPT_PATH
         
