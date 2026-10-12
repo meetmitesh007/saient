@@ -19,12 +19,16 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This fixes your script and moves inside the saient folder to compile without Vulkan
+    # This auto-detects where your code files are hidden and runs it there
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
-        echo "Found your script at: $SCRIPT_PATH"
+        CARGO_PATH=$(find . -name "Cargo.toml" -print -quit)
         
+        echo "Found script at: $SCRIPT_PATH"
+        echo "Found Cargo.toml at: $CARGO_PATH"
+        
+        # Absolute path to the script so it can be called from anywhere
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
         # 1. This clears out the features="${}" crash error automatically
@@ -35,8 +39,10 @@ jobs:
         
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # 3. Step inside the folder where your actual Cargo.toml file lives
-        cd saient
+        # 3. If Cargo.toml is in the main folder, run from main folder. If it's in a subfolder, move there.
+        if [ ! -z "$CARGO_PATH" ]; then
+          cd $(dirname "$CARGO_PATH")
+        fi
         
         # 4. Trigger the build script safely
         $ABS_SCRIPT_PATH
