@@ -11,10 +11,11 @@ jobs:
     - name: Download App Source Code
       uses: actions/checkout@v4
 
+    # This fixes the bad option error by upgrading to Node.js 22
     - name: Set up Node.js Environment
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '22'
 
     - name: Set up Java JDK
       uses: actions/setup-java@v4
@@ -26,13 +27,11 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    # This steps prepares all dependencies and installs the global tools required by the script
     - name: Pre-install Dependencies and Mobile Tools
       run: |
         npm install --legacy-peer-deps
         npm install --global expo-cli
 
-    # This runs the build script with the local paths fully working
     - name: Prepare and Run App Compiler
       run: |
         SCRIPT_PATH=$(find . -name "build-android-release.sh" -print -quit)
@@ -41,7 +40,7 @@ jobs:
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # 1. We remove the strict exit checks so it doesn't crash on testing keys
+        # 1. Remove the strict security exit checks so it runs in test mode
         sed -i 's/exit 2/# exit 2/g' "$ABS_SCRIPT_PATH"
         sed -i 's/exit 4/# exit 4/g' "$ABS_SCRIPT_PATH"
         sed -i 's/exit 5/# exit 5/g' "$ABS_SCRIPT_PATH"
@@ -59,7 +58,6 @@ jobs:
         # Run the modified script
         $ABS_SCRIPT_PATH
 
-    # This step collects the finished installable visual APK file
     - name: Upload Finished Visual Installer APK
       uses: actions/upload-artifact@v4
       with:
