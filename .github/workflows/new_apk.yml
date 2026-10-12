@@ -26,6 +26,10 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
+    # This steps installs "cargo-apk" which packages raw code into an installable Android APK file
+    - name: Install Android Packaging Tool
+      run: cargo install cargo-apk
+
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find ./my-script-folder -name "build-android-arm64.sh" -print -quit)
@@ -34,18 +38,19 @@ jobs:
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
+        
+        # This replaces the raw "cargo build" with "cargo apk build" to output a real app package
+        sed -i 's/cargo build/cargo apk build --no-default-features/g' "$ABS_SCRIPT_PATH"
         chmod +x "$ABS_SCRIPT_PATH"
         
         cd app-code
         export QUARTZ_ANDROID_FEATURES="cpu"
         $ABS_SCRIPT_PATH
 
-    # This new step packages the built file up so you can download it to your phone
-    - name: Upload Completed App File
+    # This uploads the newly created installable Android APK files
+    - name: Upload Completed APK Installation File
       uses: actions/upload-artifact@v4
       with:
-        name: no-vulkan-app-build
-        path: |
-          app-code/target/aarch64-linux-android/release/
-          app-code/target/release/
-          
+        name: no-vulkan-installer-apk
+        path: app-code/target/aarch64-linux-android/release/apk/*.apk
+        
