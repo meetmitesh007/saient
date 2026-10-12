@@ -11,6 +11,7 @@ jobs:
     - name: Get code from repository
       uses: actions/checkout@v4
 
+    # This auto-accepts all the software licenses so the download goes through
     - name: Accept Android Licenses
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
@@ -18,16 +19,16 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This updated step will search your entire repository for the script file and run it
+    # This moves into the scripts folder and runs the build clean without default features
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
-        if [ -z "$SCRIPT_PATH" ]; then
-          echo "Error: The script file build-android-arm64.sh was not found anywhere in the repository!"
-          exit 1
-        fi
         echo "Found script at: $SCRIPT_PATH"
         chmod +x "$SCRIPT_PATH"
         cd $(dirname "$SCRIPT_PATH")
-        ./build-android-arm64.sh --no-default-features
+        
+        # We edit the script's final command directly here to strip out Vulkan
+        sed -i 's/cargo build/cargo build --no-default-features/g' build-android-arm64.sh
+        
+        ./build-android-arm64.sh
         
