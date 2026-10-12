@@ -19,7 +19,7 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This moves into the scripts folder and runs the build clean without default features
+    # This fixes the script typo automatically and runs the build without Vulkan
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
@@ -27,7 +27,10 @@ jobs:
         chmod +x "$SCRIPT_PATH"
         cd $(dirname "$SCRIPT_PATH")
         
-        # We edit the script's final command directly here to strip out Vulkan
+        # 1. This automatically changes features="${}" to features="" to fix the crash
+        sed -i 's/features="${}"/features=""/g' build-android-arm64.sh
+        
+        # 2. This forces the builder to drop Vulkan and use normal processing
         sed -i 's/cargo build/cargo build --no-default-features/g' build-android-arm64.sh
         
         ./build-android-arm64.sh
