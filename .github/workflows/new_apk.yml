@@ -23,16 +23,8 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    # This installs both Platform 30 and 33 along with their tools to fix all missing dependencies
-    - name: Install Missing Android Platforms and Build Tools
-      run: |
-        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.2" "platforms;android-30" "build-tools;30.0.3"
-
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
-
-    - name: Install Android Packaging Tool
-      run: cargo install cargo-apk
 
     - name: Find and run build script
       run: |
@@ -41,23 +33,25 @@ jobs:
         
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
+        # 1. Clean the script code variable bug automatically
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
         
-        # This replaces the raw build command with the APK packager command
-        sed -i 's/cargo build/cargo apk build --no-default-features/g' "$ABS_SCRIPT_PATH"
+        # 2. Revert back to the stable cargo build command
+        sed -i 's/cargo apk build/cargo build/g' "$ABS_SCRIPT_PATH"
         chmod +x "$ABS_SCRIPT_PATH"
         
         cd app-code
+        
+        # 3. Disable Vulkan using the app's official engine switch
         export QUARTZ_ANDROID_FEATURES="cpu"
         $ABS_SCRIPT_PATH
 
-    - name: Upload Completed APK Installation File
+    # This uploads the core compiled file libraries that run without Vulkan
+    - name: Upload Completed App Core Binary
       uses: actions/upload-artifact@v4
       with:
-        name: no-vulkan-installer-apk
+        name: quartz-cpu-binary
         path: |
-          app-code/target/aarch64-linux-android/release/apk/*.apk
-          app-code/target/aarch64-linux-android/debug/apk/*.apk
-          app-code/target/release/apk/*.apk
-          app-code/target/debug/apk/*.apk
+          app-code/target/aarch64-linux-android/release/
+          app-code/target/release/
           
