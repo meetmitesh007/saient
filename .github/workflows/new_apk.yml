@@ -8,8 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Get code from your repository
+    # 1. This safely downloads the official Saient application source code first
+    - name: Download Saient Source Code
       uses: actions/checkout@v4
+      with:
+        repository: 'SaientAI/saient'
+        path: 'app-code'
+
+    # 2. This safely downloads your personal script repository into a separate folder
+    - name: Download Your Script
+      uses: actions/checkout@v4
+      with:
+        path: 'my-script-folder'
 
     - name: Accept Android Licenses
       run: |
@@ -18,16 +28,10 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # 1. This downloads the missing official Saient app source code into a folder named "app-code"
-    - name: Download App Source Code
-      run: |
-        git clone https://github.com app-code
-        echo "Source code downloaded successfully."
-
-    # 2. This automatically configures your script and runs it inside the source code folder
+    # 3. This automatically configures your script and runs it inside the source code folder
     - name: Find and run build script
       run: |
-        SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -not -path "*/app-code/*" -print -quit)
+        SCRIPT_PATH=$(find ./my-script-folder -name "build-android-arm64.sh" -print -quit)
         echo "Found your script at: $SCRIPT_PATH"
         
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
@@ -39,7 +43,7 @@ jobs:
         sed -i 's/cargo build/cargo build --no-default-features/g' "$ABS_SCRIPT_PATH"
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # Step inside the newly downloaded code folder where Cargo.toml lives
+        # Step inside the downloaded code folder where Cargo.toml lives
         cd app-code
         
         # Run the script to build your APK without Vulkan
