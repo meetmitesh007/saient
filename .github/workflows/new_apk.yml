@@ -8,10 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Get code from repository
+    - name: Get code from your repository
       uses: actions/checkout@v4
 
-    # This auto-accepts all the software licenses so the download goes through
     - name: Accept Android Licenses
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
@@ -19,31 +18,28 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This automatically downloads the missing app source code from GitHub
-    - name: Download Quartz Source Code
+    # 1. This downloads the CORRECT app code from the official Saient repository
+    - name: Download Saient Quartz Source Code
       run: |
         git clone https://github.com quartz-source
         echo "Source code downloaded successfully."
 
-    # This fixes the script, moves it into the downloaded folder, and runs it
+    # 2. This fixes the typo error and builds using the official CPU setting (No Vulkan)
     - name: Find and run build script
       run: |
-        SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
-        echo "Found script at: $SCRIPT_PATH"
+        SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -not -path "*/quartz-source/*" -print -quit)
+        echo "Found your script at: $SCRIPT_PATH"
         
-        # Absolute path to your script
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
-        # 1. Fix the syntax error in the script automatically
+        # This clears out the features="${}" crash error automatically
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
-        
-        # 2. Force the builder to drop Vulkan and use normal processing
-        sed -i 's/cargo build/cargo build --no-default-features/g' "$ABS_SCRIPT_PATH"
-        
-        # Make script executable
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # 3. Move inside the downloaded project folder where Cargo.toml lives and run the build
+        # We step inside the code folder
         cd quartz-source
+        
+        # We trigger your script but pass the custom rule telling it to drop Vulkan and use CPU
+        export QUARTZ_ANDROID_FEATURES="cpu"
         $ABS_SCRIPT_PATH
         
