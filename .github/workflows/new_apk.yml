@@ -11,6 +11,7 @@ jobs:
     - name: Get code from your repository
       uses: actions/checkout@v4
 
+    # This auto-accepts all the software licenses so the download goes through
     - name: Accept Android Licenses
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
@@ -18,7 +19,7 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This steps inside the correct scripts folder and builds the app directly
+    # This fixes your script and moves inside the saient folder to compile without Vulkan
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
@@ -26,11 +27,17 @@ jobs:
         
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
-        # This clears out the features="${}" crash error automatically
+        # 1. This clears out the features="${}" crash error automatically
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
+        
+        # 2. Force the builder to drop Vulkan and use normal CPU processing
+        sed -i 's/cargo build/cargo build --no-default-features/g' "$ABS_SCRIPT_PATH"
+        
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # We run the builder and tell it to use CPU processing instead of Vulkan graphics
-        export QUARTZ_ANDROID_FEATURES="cpu"
+        # 3. Step inside the folder where your actual Cargo.toml file lives
+        cd saient
+        
+        # 4. Trigger the build script safely
         $ABS_SCRIPT_PATH
         
