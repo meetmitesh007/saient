@@ -19,19 +19,33 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This runs the script from the main folder so it can find Cargo.toml
+    # This auto-detects where your code files are hidden and runs it there
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
+        CARGO_PATH=$(find . -name "Cargo.toml" -print -quit)
+        
         echo "Found script at: $SCRIPT_PATH"
-        chmod +x "$SCRIPT_PATH"
+        echo "Found Cargo.toml at: $CARGO_PATH"
         
-        # 1. This fixes the features="${}" crash error automatically
-        sed -i 's/features="${}"/features=""/g' "$SCRIPT_PATH"
+        if [ -z "$CARGO_PATH" ]; then
+          echo "Error: Could not find Cargo.toml anywhere in the repository!"
+          exit 1
+        fi
         
-        # 2. This forces the builder to drop Vulkan and use normal processing
-        sed -i 's/cargo build/cargo build --no-default-features/g' "$SCRIPT_PATH"
+        # Absolute path to the script
+        ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
-        # 3. We run the script directly from the main folder instead of jumping into /scripts
-        $SCRIPT_PATH
+        # 1. Fix the syntax error in the script automatically
+        sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
+        
+        # 2. Force the builder to drop Vulkan and use normal processing
+        sed -i 's/cargo build/cargo build --no-default-features/g' "$ABS_SCRIPT_PATH"
+        
+        # Make script executable
+        chmod +x "$ABS_SCRIPT_PATH"
+        
+        # 3. Move directly into the folder where Cargo.toml is located and run the script
+        cd $(dirname "$CARGO_PATH")
+        $ABS_SCRIPT_PATH
         
