@@ -19,21 +19,19 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This auto-detects where your code files are hidden and runs it there
+    # This automatically downloads the missing app source code from GitHub
+    - name: Download Quartz Source Code
+      run: |
+        git clone https://github.com quartz-source
+        echo "Source code downloaded successfully."
+
+    # This fixes the script, moves it into the downloaded folder, and runs it
     - name: Find and run build script
       run: |
         SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
-        CARGO_PATH=$(find . -name "Cargo.toml" -print -quit)
-        
         echo "Found script at: $SCRIPT_PATH"
-        echo "Found Cargo.toml at: $CARGO_PATH"
         
-        if [ -z "$CARGO_PATH" ]; then
-          echo "Error: Could not find Cargo.toml anywhere in the repository!"
-          exit 1
-        fi
-        
-        # Absolute path to the script
+        # Absolute path to your script
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         
         # 1. Fix the syntax error in the script automatically
@@ -45,7 +43,7 @@ jobs:
         # Make script executable
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # 3. Move directly into the folder where Cargo.toml is located and run the script
-        cd $(dirname "$CARGO_PATH")
+        # 3. Move inside the downloaded project folder where Cargo.toml lives and run the build
+        cd quartz-source
         $ABS_SCRIPT_PATH
         
