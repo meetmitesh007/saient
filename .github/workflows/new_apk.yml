@@ -23,10 +23,10 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    # This steps downloads the exact platform and build tools needed for Android 33
-    - name: Install Missing Android Platform and Build Tools 33
+    # This installs both Platform 30 and 33 along with their tools to fix all missing dependencies
+    - name: Install Missing Android Platforms and Build Tools
       run: |
-        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.2"
+        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.2" "platforms;android-30" "build-tools;30.0.3"
 
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
