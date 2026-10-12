@@ -26,7 +26,13 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    # This fixes the installation issue and forces the script to build a test APK
+    # This steps prepares all dependencies and installs the global tools required by the script
+    - name: Pre-install Dependencies and Mobile Tools
+      run: |
+        npm install --legacy-peer-deps
+        npm install --global expo-cli
+
+    # This runs the build script with the local paths fully working
     - name: Prepare and Run App Compiler
       run: |
         SCRIPT_PATH=$(find . -name "build-android-release.sh" -print -quit)
@@ -35,25 +41,25 @@ jobs:
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # 1. We switch the broken 'npm ci' to a flexible 'npm install' command
-        sed -i 's/npm ci --include=dev/npm install --legacy-peer-deps/g' "$ABS_SCRIPT_PATH"
-        
-        # 2. We remove the strict exit error screens that block debug builds
+        # 1. We remove the strict exit checks so it doesn't crash on testing keys
         sed -i 's/exit 2/# exit 2/g' "$ABS_SCRIPT_PATH"
         sed -i 's/exit 4/# exit 4/g' "$ABS_SCRIPT_PATH"
         sed -i 's/exit 5/# exit 5/g' "$ABS_SCRIPT_PATH"
         
-        # 3. Skip strict signing configurations for test mode
-        export SAIENT_ALLOW_DEBUG_RELEASE="true"
-        export SAIENT_SKIP_NPM_CI="true" # Tells the script to skip its own npm ci line
+        # 2. Add local project commands to the executable environment path
+        export PATH="$PATH:$(pwd)/node_modules/.bin"
         
-        # 4. Disable Vulkan graphics across background engines
+        # 3. Setup configurations for debug release mode
+        export SAIENT_ALLOW_DEBUG_RELEASE="true"
+        export SAIENT_SKIP_NPM_CI="true"
+        
+        # 4. Disable Vulkan requirements across background engines
         export QUARTZ_ANDROID_FEATURES="cpu"
         
         # Run the modified script
         $ABS_SCRIPT_PATH
 
-    # This step collects the newly created visual .apk file
+    # This step collects the finished installable visual APK file
     - name: Upload Finished Visual Installer APK
       uses: actions/upload-artifact@v4
       with:
