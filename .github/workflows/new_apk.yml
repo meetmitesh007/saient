@@ -23,10 +23,14 @@ jobs:
       run: |
         yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
 
+    # This new step installs Platform 33 so the packaging tool can build the APK
+    - name: Install Missing Android Platform 33
+      run: |
+        ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33"
+
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # This steps installs "cargo-apk" which packages raw code into an installable Android APK file
     - name: Install Android Packaging Tool
       run: cargo install cargo-apk
 
@@ -39,7 +43,7 @@ jobs:
         
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
         
-        # This replaces the raw "cargo build" with "cargo apk build" to output a real app package
+        # This replaces the raw build command with the APK packager command
         sed -i 's/cargo build/cargo apk build --no-default-features/g' "$ABS_SCRIPT_PATH"
         chmod +x "$ABS_SCRIPT_PATH"
         
@@ -47,10 +51,11 @@ jobs:
         export QUARTZ_ANDROID_FEATURES="cpu"
         $ABS_SCRIPT_PATH
 
-    # This uploads the newly created installable Android APK files
     - name: Upload Completed APK Installation File
       uses: actions/upload-artifact@v4
       with:
         name: no-vulkan-installer-apk
-        path: app-code/target/aarch64-linux-android/release/apk/*.apk
-        
+        path: |
+          app-code/target/aarch64-linux-android/release/apk/*.apk
+          app-code/target/debug/apk/*.apk
+          
