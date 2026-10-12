@@ -39,7 +39,7 @@ cmake -S "$SOURCE_ROOT" -B "$BUILD_ROOT" \
   -DCMAKE_CXX_FLAGS="-I$VULKAN_HPP_ROOT" \
   -DSPIRV-Headers_DIR=/usr/share/cmake/SPIRV-Headers \
   -DGGML_OPENMP=OFF \
-  -DSD_VULKAN=ON \
+  -DSD_VULKAN=OFF \
   -DSD_WEBP=ON \
   -DSD_WEBM=ON
 
