@@ -18,16 +18,10 @@ jobs:
     - name: Set up Rust compiler
       run: rustup target add aarch64-linux-android
 
-    # 1. This downloads the CORRECT app code from the official Saient repository
-    - name: Download Saient Quartz Source Code
-      run: |
-        git clone https://github.com quartz-source
-        echo "Source code downloaded successfully."
-
-    # 2. This fixes the typo error and builds using the official CPU setting (No Vulkan)
+    # This steps inside the correct scripts folder and builds the app directly
     - name: Find and run build script
       run: |
-        SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -not -path "*/quartz-source/*" -print -quit)
+        SCRIPT_PATH=$(find . -name "build-android-arm64.sh" -print -quit)
         echo "Found your script at: $SCRIPT_PATH"
         
         ABS_SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
@@ -36,10 +30,7 @@ jobs:
         sed -i 's/features="${}"/features=""/g' "$ABS_SCRIPT_PATH"
         chmod +x "$ABS_SCRIPT_PATH"
         
-        # We step inside the code folder
-        cd quartz-source
-        
-        # We trigger your script but pass the custom rule telling it to drop Vulkan and use CPU
+        # We run the builder and tell it to use CPU processing instead of Vulkan graphics
         export QUARTZ_ANDROID_FEATURES="cpu"
         $ABS_SCRIPT_PATH
         
